@@ -997,6 +997,7 @@ export default function App() {
   const [contentSearchResults, setContentSearchResults] = useState<string[]>([]);
   const [isSearchingContent, setIsSearchingContent] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [expandedSubthemes, setExpandedSubthemes] = useState<string[]>([]);
   const [isMobile, setIsMobile] = useState(false);
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
     if (typeof window === 'undefined') return 'light';
@@ -1157,6 +1158,16 @@ export default function App() {
     }
     return null;
   }, [currentTheme, selectedDocId]);
+
+  const isSubthemeExpanded = useCallback((subKey: string) => {
+    return expandedSubthemes.includes(subKey);
+  }, [expandedSubthemes]);
+
+  const toggleSubtheme = useCallback((subKey: string) => {
+    setExpandedSubthemes(prev =>
+      prev.includes(subKey) ? prev.filter(key => key !== subKey) : [...prev, subKey]
+    );
+  }, []);
 
   const filteredSubthemes = useMemo(() => {
     if (!currentTheme) return [];
@@ -1338,52 +1349,76 @@ export default function App() {
 
               <div className="flex-1 overflow-y-auto p-2 space-y-4">
                 {filteredSubthemes.length > 0 ? (
-                  filteredSubthemes.map((sub, subIdx) => (
-                    <div key={subIdx} className="space-y-1">
-                      <h3 className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50/50 rounded-lg">
-                        {sub.name}
-                      </h3>
-                      <div className="space-y-1">
-                        {sub.documents.map(doc => (
-                          <button
-                            key={doc.id}
-                            onClick={() => {
-                              setSelectedDocId(doc.id);
-                              if (window.innerWidth < 1024) setIsSidebarOpen(false);
-                            }}
-                            className={cn(
-                              "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all group relative overflow-hidden",
-                              selectedDocId === doc.id 
-                                ? "bg-brand-blue text-white shadow-md" 
-                                : "hover:bg-slate-50 text-slate-600"
-                            )}
-                          >
-                            <div className={cn(
-                              "p-2 rounded-lg transition-colors",
-                              selectedDocId === doc.id ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"
-                            )}>
-                              {getFileIcon(doc.type)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold truncate leading-tight">{doc.name}</p>
-                              <p className={cn(
-                                "text-[10px] uppercase tracking-wider font-bold mt-0.5",
-                                selectedDocId === doc.id ? "text-white/60" : "text-slate-400"
-                              )}>
-                                {doc.type}
-                              </p>
-                            </div>
-                            {selectedDocId === doc.id && (
-                              <motion.div 
-                                layoutId="active-indicator"
-                                className="absolute right-0 top-0 bottom-0 w-1 bg-brand-gold"
-                              />
-                            )}
-                          </button>
-                        ))}
+                  filteredSubthemes.map((sub, subIdx) => {
+                    const subKey = `${currentTheme?.id || ''}-${subIdx}`;
+                    const expanded = isSubthemeExpanded(subKey);
+
+                    return (
+                      <div key={subKey} className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleSubtheme(subKey)}
+                          className={cn(
+                            "w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl transition-all text-left",
+                            expanded ? "bg-slate-100 text-slate-900" : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                          )}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate leading-tight">{sub.name}</p>
+                            <p className="text-[10px] uppercase tracking-wider font-bold mt-0.5 text-slate-500">
+                              {sub.documents.length} документ{sub.documents.length === 1 ? '' : 'ов'}
+                            </p>
+                          </div>
+                          <ChevronDown className={cn(
+                            "w-4 h-4 transition-transform",
+                            expanded ? "rotate-180 text-brand-blue" : "text-slate-400"
+                          )} />
+                        </button>
+
+                        {expanded && (
+                          <div className="space-y-1 pl-4">
+                            {sub.documents.map(doc => (
+                              <button
+                                key={doc.id}
+                                onClick={() => {
+                                  setSelectedDocId(doc.id);
+                                  if (window.innerWidth < 1024) setIsSidebarOpen(false);
+                                }}
+                                className={cn(
+                                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all group relative overflow-hidden",
+                                  selectedDocId === doc.id 
+                                    ? "bg-brand-blue text-white shadow-md" 
+                                    : "hover:bg-slate-50 text-slate-600"
+                                )}
+                              >
+                                <div className={cn(
+                                  "p-2 rounded-lg transition-colors",
+                                  selectedDocId === doc.id ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"
+                                )}>
+                                  {getFileIcon(doc.type)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold truncate leading-tight">{doc.name}</p>
+                                  <p className={cn(
+                                    "text-[10px] uppercase tracking-wider font-bold mt-0.5",
+                                    selectedDocId === doc.id ? "text-white/60" : "text-slate-400"
+                                  )}>
+                                    {doc.type}
+                                  </p>
+                                </div>
+                                {selectedDocId === doc.id && (
+                                  <motion.div 
+                                    layoutId="active-indicator"
+                                    className="absolute right-0 top-0 bottom-0 w-1 bg-brand-gold"
+                                  />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="flex flex-col items-center justify-center py-12 text-slate-400">
                     <Search className="w-8 h-8 mb-2 opacity-20" />
