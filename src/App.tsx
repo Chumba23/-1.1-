@@ -19,6 +19,8 @@ import {
   Trash2,
   Save,
   Settings,
+  Sun,
+  Moon,
   ChevronDown,
   ChevronUp,
   ExternalLink
@@ -347,6 +349,67 @@ const AdminDashboard: React.FC<{
 }> = ({ catalog, setCatalog, onSave, onLogout, onBack, isSaving, saveStatus }) => {
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<string>('all');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{type: 'theme' | 'subtheme' | 'document', themeIdx?: number, subIdx?: number, docIdx?: number} | null>(null);
+
+  // Filter and search logic
+  const filteredCatalog = useMemo(() => {
+    return {
+      themes: catalog.themes.map(theme => ({
+        ...theme,
+        subthemes: theme.subthemes.map(sub => ({
+          ...sub,
+          documents: sub.documents.filter(doc => {
+            const matchesSearch = !searchQuery || 
+              doc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              sub.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              theme.name.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesFilter = filterType === 'all' || doc.type === filterType;
+            return matchesSearch && matchesFilter;
+          })
+        })).filter(sub => sub.documents.length > 0 || !searchQuery)
+      })).filter(theme => theme.subthemes.length > 0 || !searchQuery)
+    };
+  }, [catalog, searchQuery, filterType]);
+
+  // Statistics
+  const stats = useMemo(() => {
+    let totalDocs = 0;
+    let totalThemes = catalog.themes.length;
+    let totalSubthemes = 0;
+    const typeCounts: Record<string, number> = {};
+
+    catalog.themes.forEach(theme => {
+      totalSubthemes += theme.subthemes.length;
+      theme.subthemes.forEach(sub => {
+        totalDocs += sub.documents.length;
+        sub.documents.forEach(doc => {
+          typeCounts[doc.type] = (typeCounts[doc.type] || 0) + 1;
+        });
+      });
+    });
+
+    return { totalDocs, totalThemes, totalSubthemes, typeCounts };
+  }, [catalog]);
+
+  const handleDelete = () => {
+    if (!showDeleteConfirm) return;
+
+    const { type, themeIdx, subIdx, docIdx } = showDeleteConfirm;
+    const newThemes = [...catalog.themes];
+
+    if (type === 'theme' && themeIdx !== undefined) {
+      newThemes.splice(themeIdx, 1);
+    } else if (type === 'subtheme' && themeIdx !== undefined && subIdx !== undefined) {
+      newThemes[themeIdx].subthemes.splice(subIdx, 1);
+    } else if (type === 'document' && themeIdx !== undefined && subIdx !== undefined && docIdx !== undefined) {
+      newThemes[themeIdx].subthemes[subIdx].documents.splice(docIdx, 1);
+    }
+
+    setCatalog({ ...catalog, themes: newThemes });
+    setShowDeleteConfirm(null);
+  };
 
   const onDragEnd = (result: DropResult) => {
     const { source, destination } = result;
@@ -598,9 +661,81 @@ const AdminDashboard: React.FC<{
           </div>
         </div>
 
+        {/* Statistics */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mb-6">
+          <h3 className="text-lg font-bold text-slate-800 mb-4">Статистика каталога</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-brand-blue">{stats.totalThemes}</div>
+              <div className="text-sm text-slate-500">Институтов</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-brand-blue">{stats.totalSubthemes}</div>
+              <div className="text-sm text-slate-500">Подтем</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-brand-blue">{stats.totalDocs}</div>
+              <div className="text-sm text-slate-500">Документов</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-slate-600">{Object.keys(stats.typeCounts).length}</div>
+              <div className="text-sm text-slate-500">Типов файлов</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Search and Filter */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mb-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-slate-700 mb-2">Поиск документов</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Введите название документа, подтемы или института..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-blue outline-none"
+                />
+              </div>
+            </div>
+            <div className="md:w-48">
+              <label className="block text-sm font-medium text-slate-700 mb-2">Фильтр по типу</label>
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-blue outline-none"
+              >
+                <option value="all">Все типы</option>
+                <option value="pdf">PDF</option>
+                <option value="md">Markdown</option>
+                <option value="txt">Текст</option>
+                <option value="image">Изображения</option>
+                <option value="docx">Word</option>
+                <option value="xlsx">Excel</option>
+                <option value="pptx">PowerPoint</option>
+              </select>
+            </div>
+          </div>
+          {(searchQuery || filterType !== 'all') && (
+            <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
+              <span>Результаты:</span>
+              {searchQuery && <span className="bg-slate-100 px-2 py-1 rounded">Поиск: "{searchQuery}"</span>}
+              {filterType !== 'all' && <span className="bg-slate-100 px-2 py-1 rounded">Тип: {filterType}</span>}
+              <button
+                onClick={() => { setSearchQuery(''); setFilterType('all'); }}
+                className="text-brand-blue hover:underline ml-2"
+              >
+                Сбросить
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="space-y-6">
           <DragDropContext onDragEnd={onDragEnd}>
-            {catalog.themes.map((theme, themeIdx) => (
+            {filteredCatalog.themes.map((theme, themeIdx) => (
               <div key={theme.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1">
@@ -620,11 +755,9 @@ const AdminDashboard: React.FC<{
                   </div>
                   <div className="flex items-center gap-2">
                     <button 
-                      onClick={() => {
-                        const newThemes = catalog.themes.filter((_, i) => i !== themeIdx);
-                        setCatalog({ ...catalog, themes: newThemes });
-                      }}
+                      onClick={() => setShowDeleteConfirm({ type: 'theme', themeIdx })}
                       className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                      title="Удалить институт"
                     >
                       <Trash2 className="w-5 h-5" />
                     </button>
@@ -646,12 +779,9 @@ const AdminDashboard: React.FC<{
                           className="text-xs font-bold text-slate-400 uppercase tracking-widest bg-transparent border-none focus:ring-0 p-0 w-full"
                         />
                         <button 
-                          onClick={() => {
-                            const newThemes = [...catalog.themes];
-                            newThemes[themeIdx].subthemes = theme.subthemes.filter((_, i) => i !== subIdx);
-                            setCatalog({ ...catalog, themes: newThemes });
-                          }}
+                          onClick={() => setShowDeleteConfirm({ type: 'subtheme', themeIdx, subIdx })}
                           className="text-slate-300 hover:text-red-400 transition-colors"
+                          title="Удалить подтему"
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -711,12 +841,9 @@ const AdminDashboard: React.FC<{
                                           />
                                         </label>
                                         <button 
-                                          onClick={() => {
-                                            const newThemes = [...catalog.themes];
-                                            newThemes[themeIdx].subthemes[subIdx].documents = sub.documents.filter((_, i) => i !== docIdx);
-                                            setCatalog({ ...catalog, themes: newThemes });
-                                          }}
+                                          onClick={() => setShowDeleteConfirm({ type: 'document', themeIdx, subIdx, docIdx })}
                                           className="p-2 text-slate-300 hover:text-red-400 transition-all"
+                                          title="Удалить документ"
                                         >
                                           <Trash2 className="w-4 h-4" />
                                         </button>
@@ -819,6 +946,43 @@ const AdminDashboard: React.FC<{
           </motion.div>
         </div>
       )}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white p-6 rounded-2xl shadow-2xl max-w-md w-full"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-red-100 p-3 rounded-full">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Подтверждение удаления</h3>
+                <p className="text-slate-500 text-sm">
+                  {showDeleteConfirm.type === 'theme' && 'Вы уверены, что хотите удалить этот институт и все его содержимое?'}
+                  {showDeleteConfirm.type === 'subtheme' && 'Вы уверены, что хотите удалить эту подтему и все её документы?'}
+                  {showDeleteConfirm.type === 'document' && 'Вы уверены, что хотите удалить этот документ?'}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleDelete}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Удалить
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };
@@ -833,12 +997,48 @@ export default function App() {
   const [contentSearchResults, setContentSearchResults] = useState<string[]>([]);
   const [isSearchingContent, setIsSearchingContent] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') return 'light';
+    return window.localStorage.getItem('kioskTheme') === 'dark' ? 'dark' : 'light';
+  });
   
   // Admin State
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', themeMode === 'dark');
+    window.localStorage.setItem('kioskTheme', themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 768px)');
+    const updateIsMobile = () => setIsMobile(mql.matches);
+
+    updateIsMobile();
+    if (mql.addEventListener) {
+      mql.addEventListener('change', updateIsMobile);
+    } else {
+      mql.addListener(updateIsMobile);
+    }
+
+    return () => {
+      if (mql.removeEventListener) {
+        mql.removeEventListener('change', updateIsMobile);
+      } else {
+        mql.removeListener(updateIsMobile);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isMobile && showAdminLogin) {
+      setShowAdminLogin(false);
+    }
+  }, [isMobile, showAdminLogin]);
 
   // Content Search Effect
   useEffect(() => {
@@ -1019,16 +1219,25 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen">
       {/* Header */}
-      <header className="h-16 bg-brand-blue text-white flex items-center justify-between px-6 shadow-md z-20">
-        <div className="flex items-center gap-4">
-          <div className="bg-brand-gold p-2 rounded-lg">
-            <BookOpen className="w-6 h-6 text-brand-blue" />
+      <header className="h-16 bg-brand-blue text-white flex items-center justify-between px-4 sm:px-6 shadow-md z-20">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsSidebarOpen(prev => !prev)}
+            className="p-2 hover:bg-white/10 rounded-full transition-colors lg:hidden"
+            title={isSidebarOpen ? 'Закрыть меню' : 'Открыть меню'}
+          >
+            {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+
+          <div className="hidden sm:flex items-center gap-4">
+            <div className="bg-brand-gold p-2 rounded-lg">
+              <BookOpen className="w-6 h-6 text-brand-blue" />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight">ИТ-Школа Кострома</h1>
+            <div className="h-8 w-px bg-white/20 mx-2" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight hidden sm:block">ИТ-Школа Кострома</h1>
-          
-          <div className="h-8 w-px bg-white/20 mx-2 hidden sm:block" />
-          
-          <div className="relative">
+
+          <div className="relative flex-1 min-w-0">
             <select 
               value={selectedThemeId || ''} 
               onChange={(e) => {
@@ -1038,7 +1247,7 @@ export default function App() {
                 const firstDoc = theme?.subthemes[0]?.documents[0];
                 setSelectedDocId(firstDoc?.id || null);
               }}
-              className="bg-white/10 hover:bg-white/20 text-white border-none rounded-lg px-4 py-2 pr-10 appearance-none cursor-pointer focus:ring-2 focus:ring-brand-gold outline-none transition-all font-medium max-w-[200px] sm:max-w-xs md:max-w-md truncate"
+              className="w-full bg-white/10 hover:bg-white/20 text-white border-none rounded-lg px-4 py-2 pr-10 appearance-none cursor-pointer focus:ring-2 focus:ring-brand-gold outline-none transition-all font-medium max-w-[200px] sm:max-w-xs md:max-w-md truncate"
             >
               {catalog.themes.map(theme => (
                 <option key={theme.id} value={theme.id} className="text-slate-900">
@@ -1065,15 +1274,25 @@ export default function App() {
             <RefreshCw className={cn("w-5 h-5", isRefreshing && "animate-spin")} />
           </button>
           
+          <button
+            onClick={() => setThemeMode(prev => prev === 'light' ? 'dark' : 'light')}
+            className="p-2 hover:bg-white/10 rounded-full transition-colors"
+            title={themeMode === 'light' ? 'Включить тёмную тему' : 'Включить светлую тему'}
+          >
+            {themeMode === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+          </button>
+          
           <div className="h-6 w-px bg-white/20 mx-1" />
           
-          <button 
-            onClick={() => setShowAdminLogin(true)}
-            className="p-2 hover:bg-white/10 rounded-full transition-colors"
-            title={isAdmin ? "Админ-панель" : "Войти как админ"}
-          >
-            {isAdmin ? <Settings className="w-5 h-5 text-brand-gold" /> : <Lock className="w-5 h-5" />}
-          </button>
+          {!isMobile && (
+            <button 
+              onClick={() => setShowAdminLogin(true)}
+              className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              title={isAdmin ? "Админ-панель" : "Войти как админ"}
+            >
+              {isAdmin ? <Settings className="w-5 h-5 text-brand-gold" /> : <Lock className="w-5 h-5" />}
+            </button>
+          )}
 
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -1086,6 +1305,14 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex overflow-hidden relative">
+        {/* Overlay on mobile when sidebar is open */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-slate-900/40 lg:hidden z-20"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
+
         {/* Sidebar (Documents List) */}
         <AnimatePresence mode="wait">
           {isSidebarOpen && (
@@ -1094,7 +1321,7 @@ export default function App() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -300, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="w-full sm:w-72 lg:w-80 bg-white border-r border-slate-200 flex flex-col z-10 absolute lg:relative h-full shadow-xl lg:shadow-none"
+              className="w-full sm:w-72 lg:w-80 bg-white border-r border-slate-200 flex flex-col z-30 absolute lg:relative h-full shadow-xl lg:shadow-none"
             >
               <div className="p-4 border-b border-slate-100">
                 <div className="relative">
