@@ -5,9 +5,7 @@ meta:
     version: 20
 
 build:
-  commands:
-    - npm install
-    - npm run build
+    command: npm install && npm run build
 
 run:
   command: npm start
